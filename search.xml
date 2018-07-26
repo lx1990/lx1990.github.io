@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<search> 
+  
+    
+    <entry>
+      <title></title>
+      <link href="/2018/07/26/Docker-engine-API/"/>
+      <content type="html"><![CDATA[]]></content>
+      
+      
+    </entry>
+    
+    <entry>
+      <title>confd+nginx+etcd实现无感知升级</title>
+      <link href="/2018/07/26/confd+nginx+etcd%E5%AE%9E%E7%8E%B0%E6%97%A0%E6%84%9F%E7%9F%A5%E5%8D%87%E7%BA%A7/"/>
+      <content type="html"><![CDATA[<p><a href="http://www.confd.io/" target="_blank" rel="noopener">confd官网</a></p><h3 id="背景介绍"><a href="#背景介绍" class="headerlink" title="背景介绍"></a>背景介绍</h3><p>&emsp;&emsp;基于我们现在自己服务的体量，发现使用<code>confd+nginx+etcd+docker</code>能够满足我们实现无感知升级的需求，且比较轻量。遂，组长让我研究一下<code>confd</code>。<code>nginx</code>、<code>ectd</code>和<code>docker</code>这里不做过多的介绍，只关注confd。</p><h3 id="无感知原理"><a href="#无感知原理" class="headerlink" title="无感知原理"></a>无感知原理</h3><a id="more"></a><p>&emsp;&emsp;假设我们有一个服务起了两个<code>docker</code>镜像，那么我们把这两个镜像的地址都放在<code>etcd</code>中，并启动在<code>confd</code>进行监测。<br>&emsp;&emsp;当我们需要对服务进行升级时，我们可以先在<code>etcd</code>中删除一个<code>docker</code>的地址，这样<code>confd</code>会检测到配置有变动，重新生成新的<code>nginx</code>配置文件并且重启<code>nginx</code>。<br>&emsp;&emsp;因为<code>nginx</code>的重启时间相当短暂，几乎在瞬间完成，所以此时<code>nginx</code>指向不到已经删除掉的<code>docker</code>地址，我们可以升级完服务，启动新的<code>docker</code>，再将新的<code>docker</code>服务的地址放回<code>etcd</code>中，剩下的老的<code>docker</code>服务也以此类推，从而做到无感知升级。</p><h3 id="运行环境"><a href="#运行环境" class="headerlink" title="运行环境"></a>运行环境</h3><blockquote><p>centos7</p></blockquote><h3 id="安装confd"><a href="#安装confd" class="headerlink" title="安装confd"></a>安装confd</h3><ul><li>下载+安装<blockquote></blockquote>  wget <a href="https://github.com/kelseyhightower/confd/releases/download/v0.16.0/confd-0.16.0-linux-amd64" target="_blank" rel="noopener">https://github.com/kelseyhightower/confd/releases/download/v0.16.0/confd-0.16.0-linux-amd64</a><br>  mkdir -p /opt/confd/bin<br>  mv confd-0.16.0-linux-amd64 /opt/confd/bin/confd<br>  chmod +x /opt/confd/bin/confd<br>  export PATH=”$PATH:/opt/confd/bin”</li></ul><p>&emsp;&emsp;使用前需要创建相应的配置目录</p><h3 id="配置confd"><a href="#配置confd" class="headerlink" title="配置confd"></a>配置confd</h3><ul><li><p>创建配置目录</p><blockquote><p>mkdir -p /etc/confd/{conf.d,templates}</p></blockquote></li><li><p>在<code>/etc/confd/conf.d</code>下创建配置文件：</p><blockquote><p>vim /etc/confd/conf.d/cloud.toml</p></blockquote></li></ul><p>&emsp;&emsp;这个里面是confd生成的nginx配置文件</p><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"># etcd中keys的前缀</span><br><span class="line">prefix = &quot;/cloud&quot;</span><br><span class="line"># src指/etc/confd/templates中的模板文件的名字</span><br><span class="line">src = &quot;cloud.conf.tmpl&quot;</span><br><span class="line"># dest指nginx配置文件生成目录</span><br><span class="line">dest = &quot;/etc/nginx/conf.d/cloud.conf&quot;</span><br><span class="line"># keys指的是etcd中的keys</span><br><span class="line">keys = [</span><br><span class="line">    &quot;/subdomain&quot;,</span><br><span class="line">    &quot;/upstream&quot;</span><br><span class="line">]</span><br><span class="line">reload_cmd = &quot;nginx -s reload&quot;</span><br><span class="line">#reload_cmd = &quot;service nginx reload&quot;</span><br></pre></td></tr></table></figure><ul><li>在<code>/etc/confd/templates</code>下创建模板文件：<blockquote><p>vim /etc/confd/templates/cloud.conf.tmpl</p></blockquote></li></ul><p>&emsp;&emsp;这个里面是nginx的upstream的模板，被<code>/etc/confd/conf.d/cloud.toml</code>读取</p><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"># upstream指从etcd某个键中读取出来的数据</span><br><span class="line">upstream &#123;&#123;getv &quot;/subdomain&quot;&#125;&#125; &#123;</span><br><span class="line">    &#123;&#123;range getvs &quot;/upstream/*&quot;&#125;&#125;</span><br><span class="line">        server &#123;&#123;.&#125;&#125;;</span><br><span class="line">    &#123;&#123;end&#125;&#125;</span><br><span class="line">    &#125;</span><br><span class="line">    server &#123;</span><br><span class="line">        listen      443 ;</span><br><span class="line">        server_name  jswym.com;</span><br><span class="line">        location / &#123;</span><br><span class="line">            proxy_pass        http://&#123;&#123;getv &quot;/subdomain&quot;&#125;&#125;;</span><br><span class="line">            proxy_redirect    off;</span><br><span class="line">            proxy_set_header  Host             $host;</span><br><span class="line">            proxy_set_header  X-Real-IP        $remote_addr;</span><br><span class="line">            proxy_set_header  X-Forwarded-For  $proxy_add_x_forwarded_for;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure><ul><li>修改nginx中的配置<blockquote><p> vim /etc/nginx/nginx.conf </p></blockquote></li></ul><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line">http &#123;</span><br><span class="line">    include       mime.types;</span><br><span class="line">    default_type  application/octet-stream;</span><br><span class="line"></span><br><span class="line">    log_format  main  &apos;$remote_addr - $remote_user [$time_local] &quot;$request&quot; &apos;</span><br><span class="line">                    &apos;$status $body_bytes_sent &quot;$http_referer&quot; &quot;$http_host&quot; &apos;</span><br><span class="line">                    &apos;&quot;$http_user_agent&quot; &quot;$http_x_forwarded_for&quot;&apos;</span><br><span class="line">                    &apos;&quot;$upstream_addr&quot; &quot;$upstream_cache_status&quot; &quot;$upstream_status&quot; &quot;$upstream_response_time&quot;&apos;</span><br><span class="line">                    &apos;&quot;$Cookie_CookKey&quot;&apos;;</span><br><span class="line"></span><br><span class="line">    access_log  /var/log/nginx/nginx_access.log  main;</span><br><span class="line"></span><br><span class="line">    sendfile        on;</span><br><span class="line">    #tcp_nopush     on;</span><br><span class="line"></span><br><span class="line">    #keepalive_timeout  0;</span><br><span class="line">    keepalive_timeout  65;</span><br><span class="line"></span><br><span class="line">    #gzip  on;</span><br><span class="line"></span><br><span class="line">    include /etc/nginx/conf.d/*.conf;   </span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">重点是include这一行</span><br></pre></td></tr></table></figure><h3 id="执行生成配置文件"><a href="#执行生成配置文件" class="headerlink" title="执行生成配置文件"></a>执行生成配置文件</h3><blockquote></blockquote><pre><code>confd -onetime -backend etcd -node http://127.0.0.1:2379    只一次confd -interval=60 -backend etcd -node http://127.0.0.1:2379 &amp;   按时间轮询</code></pre><p>&emsp;&emsp;上述俩http地址为etcd的地址，自行替换即可</p><h3 id="操作"><a href="#操作" class="headerlink" title="操作"></a>操作</h3><blockquote><p>etcdctl set /cloud/upstream/192.168.0.98_1337 192.168.0.98:1337</p></blockquote><p>&emsp;&emsp;接下来，当你在对etcd进行操作的时候，如上，confd会进行轮询，发现有所改动，自动生成nginx的配置文件，并重启nginx</p><h2 id="docker化confd"><a href="#docker化confd" class="headerlink" title="docker化confd"></a>docker化confd</h2><ul><li><p>docker启动命令</p><blockquote></blockquote><p>  docker run –name confd –restart=always -v /etc/confd/conf.d/:/etc/confd/conf.d/ -v /etc/confd/templates/:/etc/confd/templates/ -v /etc/nginx/conf.d/:/etc/nginx/conf.d/ –net=host -d confd  sh -c “/opt/confd/bin/run.sh  ‘10’ ‘<a href="http://192.168.0.71:2379&#39;" target="_blank" rel="noopener">http://192.168.0.71:2379&#39;</a> “<br>  10 表示多少秒轮询一次；后面的地址是etcd的地址</p></li><li><p>Dockerfile</p></li></ul><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">FROM nginx:latest</span><br><span class="line">MAINTAINER lx1990</span><br><span class="line">WORKDIR /opt/confd/bin</span><br><span class="line">COPY ./confd /opt/confd/bin/confd</span><br><span class="line">COPY ./run.sh /opt/confd/bin/run.sh</span><br><span class="line">RUN chmod +x /opt/confd/bin/run.sh</span><br><span class="line">RUN mkdir -p /etc/confd/conf.d</span><br><span class="line">RUN mkdir -p /etc/confd/templates</span><br><span class="line">RUN mkdir -p /etc/nginx/conf.d</span><br></pre></td></tr></table></figure><ul><li>run.sh</li></ul><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">#!/bin/bash</span><br><span class="line">cd /opt/confd/bin</span><br><span class="line">./confd -interval=$1 -backend etcd -node $2 &amp;</span><br><span class="line">nginx -g &apos;daemon off;&apos;</span><br></pre></td></tr></table></figure><p>—————-<strong>华丽的分割线</strong>—————-</p><p><strong>若未标明转载，本博客内容均为原创。</strong></p><p><strong>版权归作者所有，转载请注明出处。</strong></p>]]></content>
+      
+      <categories>
+          
+          <category> 运维 </category>
+          
+      </categories>
+      
+      
+        <tags>
+            
+            <tag> nginx </tag>
+            
+            <tag> confd </tag>
+            
+            <tag> etcd </tag>
+            
+        </tags>
+      
+    </entry>
+    
+    <entry>
+      <title>hexo+github搭建博客</title>
+      <link href="/2018/07/26/hexo+github%E6%90%AD%E5%BB%BA%E5%8D%9A%E5%AE%A2/"/>
+      <content type="html"><![CDATA[<p><a href="https://hexo.io/zh-cn/docs/" target="_blank" rel="noopener">hexo官方文档</a></p><p>&emsp;&emsp;前文说到此博客是基于hexo框架+github搭建起来的，下面来进行详细说明搭建过程。</p><h3 id="在github注册博客地址"><a href="#在github注册博客地址" class="headerlink" title="在github注册博客地址"></a>在github注册博客地址</h3><blockquote><p> github上新建一个仓库，命名为XXXX.github.io，xxxx为你的用户名<br><a id="more"></a></p></blockquote><h3 id="搭建hexo"><a href="#搭建hexo" class="headerlink" title="搭建hexo"></a>搭建hexo</h3><ul><li><strong>安装<a href="https://nodejs.org/en/" target="_blank" rel="noopener">Nodejs</a></strong></li><li><strong>安装<a href="https://git-scm.com/" target="_blank" rel="noopener">Git</a></strong></li><li><p><strong>安装hexo-cli</strong></p><blockquote><p>npm install -g hexo-cli</p></blockquote></li><li><p><strong>建站</strong></p><blockquote><p>hexo init &lt;folder><br>cd &lt;folder><br>npm install</p></blockquote></li></ul><h3 id="使用hexo"><a href="#使用hexo" class="headerlink" title="使用hexo"></a>使用hexo</h3><ul><li><strong>启动hexo</strong><blockquote><p>hexo server </p></blockquote></li></ul><p>&emsp;&emsp;此时，访问localhost:4000，已经可以看到博客了</p><ul><li><strong>新增一篇文章</strong><blockquote><p>hexo new &lt;title></p></blockquote></li></ul><p>&emsp;&emsp;此时，在项目内的<code>source/_posts</code>目录下会出现一个名为title的md文件，进入编辑即可</p><ul><li><strong>生成静态文件</strong><blockquote><p>hexo generate </p></blockquote></li></ul><p>&emsp;&emsp;接下来启动服务，可以看到新增的文章已经更新上去了</p><h3 id="部署-git版本"><a href="#部署-git版本" class="headerlink" title="部署(git版本)"></a>部署(git版本)</h3><p>&emsp;&emsp;Hexo 提供了快速方便的一键部署功能，让您只需一条命令就能将网站部署到服务器上。</p><ul><li><strong>安装部署模块</strong><blockquote><p>npm install hexo-deployer-git –save</p></blockquote></li><li><p><strong>在<code>_config.yml</code>中修改参数</strong></p><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">deploy:</span><br><span class="line">  type: git</span><br><span class="line">  repository: 你的仓库地址</span><br><span class="line">  branch: master</span><br></pre></td></tr></table></figure></li><li><p><strong>部署</strong></p><blockquote><p>hexo deploy </p></blockquote></li></ul><p>&emsp;&emsp;随后，访问你自己的地址xxx.github.io</p><h3 id="常用命令"><a href="#常用命令" class="headerlink" title="常用命令"></a>常用命令</h3><ul><li><strong>init</strong><blockquote><p>hexo init [folder]</p></blockquote></li></ul><p>&emsp;&emsp;新建一个网站。如果没有设置<code>folder</code>，Hexo 默认在目前的文件夹建立网站。</p><ul><li><strong>new</strong> <blockquote><p>hexo new [layout] &lt;title></p></blockquote></li></ul><p>&emsp;&emsp;新建一篇文章。如果没有设置 <code>layout</code> 的话，默认使用 <code>_config.yml</code> 中的 <code>default_layout</code> 参数代替。如果标题包含空格的话，请使用引号括起来。</p><ul><li><p><strong>generate</strong></p><blockquote><p>hexo generate 可简写为：hexo g</p></blockquote></li><li><p><strong>server</strong></p><blockquote><p>hexo server 可简写为：hexo s</p></blockquote></li><li><p><strong>clean</strong> </p><blockquote><p>hexo clean</p></blockquote></li></ul><p>&emsp;&emsp;清除缓存文件 (<code>db.json</code>) 和已生成的静态文件 (<code>public</code>)。</p><ul><li><p><strong>deploy</strong></p><blockquote><p>hexo deploy 可简写为：hexo d</p></blockquote></li><li><p><strong>文件生成后立即部署网站</strong></p><blockquote><p>hexo g -d 或 hexo d -g</p></blockquote></li></ul><p>—————-<strong>华丽的分割线</strong>—————-</p><p><strong>若未标明转载，本博客内容均为原创。</strong></p><p><strong>版权归作者所有，转载请注明出处。</strong></p>]]></content>
+      
+      <categories>
+          
+          <category> 前端 </category>
+          
+      </categories>
+      
+      
+        <tags>
+            
+            <tag> hexo </tag>
+            
+        </tags>
+      
+    </entry>
+    
+    <entry>
+      <title>不知所云</title>
+      <link href="/2018/07/24/%E4%B8%8D%E7%9F%A5%E6%89%80%E4%BA%91/"/>
+      <content type="html"><![CDATA[<p>&emsp;&emsp;去年我也曾在VPS上部署过一个博客，计划把一些心得总结梳理在上面。</p><p>&emsp;&emsp;但是总因一些这儿或者那的事情（归根结底还是懒惰）搁置，最终结果就是一篇都没写。</p><p>&emsp;&emsp;最近正好研究的东西比较多，想记录下来（一直笔记都放在有道云），正巧有朋友问我之前弄的博客相关信息，遂决定继续启动博客项目，并将其部署在github上。<br><a id="more"></a><br>&emsp;&emsp;为什么要部署在github上，而不是部署在自己的vps上，原因主要有两点：</p><p>&emsp;&emsp;1、github相对自己的vps来说更加稳定（大品牌，信得过）</p><p>&emsp;&emsp;2、vps的硬盘比较小（屌丝乞丐版），当时的定位就是梯子和折腾，环境相对不够稳定，不适合部署服务。</p><p>&emsp;&emsp;本博客使用hexo搭建，具体请移步<a href="https://hexo.io/" target="_blank" rel="noopener">hexo官网</a>，这里不再多做介绍，后续会详细说明搭建过程。</p><p>&emsp;&emsp;博客的主题为Nayo，具体请移步<a href="https://github.com/Lemonreds/hexo-theme-Nayo" target="_blank" rel="noopener">Nayo</a>。</p><p>&emsp;&emsp;行百里者半九十，希望我能够坚持下去记录我的技术成长（立个长期的flag）。</p><p>—————-<strong>华丽的分割线</strong>—————-</p><p><strong>若未标明转载，本博客内容均为原创。</strong></p><p><strong>版权归作者所有，转载请注明出处。</strong></p>]]></content>
+      
+      <categories>
+          
+          <category> 生活 </category>
+          
+      </categories>
+      
+      
+        <tags>
+            
+            <tag> 随笔 </tag>
+            
+        </tags>
+      
+    </entry>
+    
+    <entry>
+      <title>hello world</title>
+      <link href="/2018/07/17/hello%20world/"/>
+      <content type="html"><![CDATA[<p>一楼hello world</p>]]></content>
+      
+      <categories>
+          
+          <category> test </category>
+          
+      </categories>
+      
+      
+        <tags>
+            
+            <tag> test </tag>
+            
+        </tags>
+      
+    </entry>
+    
+  
+  
+</search>
