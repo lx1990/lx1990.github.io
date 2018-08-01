@@ -96,7 +96,7 @@
 
 			
 					<p><a href="http://www.confd.io/" target="_blank" rel="noopener">confd官网</a></p>
-<h3 id="背景介绍"><a href="#背景介绍" class="headerlink" title="背景介绍"></a>背景介绍</h3><p>&emsp;&emsp;基于我们现在自己服务的体量，发现使用<code>confd+nginx+etcd+docker</code>能够满足我们实现无感知升级的需求，且比较轻量。遂，组长让我研究一下<code>confd</code>。<code>nginx</code>、<code>ectd</code>和<code>docker</code>这里不做过多的介绍，只关注confd。</p>
+<h3 id="背景介绍"><a href="#背景介绍" class="headerlink" title="背景介绍"></a>背景介绍</h3><p>&emsp;&emsp;基于我们现在自己服务的体量，发现使用<code>confd+nginx+etcd+docker</code>能够满足我们实现无感知升级的需求，且比较轻量。遂，组长让我研究一下<code>confd</code>。<code>nginx</code>、<code>ectd</code>和<code>docker</code>这里不做过多的介绍，只关注<code>confd</code>。</p>
 <h3 id="无感知原理"><a href="#无感知原理" class="headerlink" title="无感知原理"></a>无感知原理</h3><a id="more"></a>
 <p>&emsp;&emsp;假设我们有一个服务起了两个<code>docker</code>镜像，那么我们把这两个镜像的地址都放在<code>etcd</code>中，并启动在<code>confd</code>进行监测。<br>&emsp;&emsp;当我们需要对服务进行升级时，我们可以先在<code>etcd</code>中删除一个<code>docker</code>的地址，这样<code>confd</code>会检测到配置有变动，重新生成新的<code>nginx</code>配置文件并且重启<code>nginx</code>。<br>&emsp;&emsp;因为<code>nginx</code>的重启时间相当短暂，几乎在瞬间完成，所以此时<code>nginx</code>指向不到已经删除掉的<code>docker</code>地址，我们可以升级完服务，启动新的<code>docker</code>，再将新的<code>docker</code>服务的地址放回<code>etcd</code>中，剩下的老的<code>docker</code>服务也以此类推，从而做到无感知升级。</p>
 <h3 id="运行环境"><a href="#运行环境" class="headerlink" title="运行环境"></a>运行环境</h3><blockquote>
@@ -255,7 +255,7 @@ confd -interval=60 -backend etcd -node http://127.0.0.1:2379 &amp;   按时间�
     <nav class="pf-paginator">
       
          
-          <a href="/2018/07/26/Docker-engine-API/" data-hover="Docker engine API">上一篇</a>      
+          <a href="/2018/07/26/Docker engine API/" data-hover="Docker engine API">上一篇</a>      
             
         
       
